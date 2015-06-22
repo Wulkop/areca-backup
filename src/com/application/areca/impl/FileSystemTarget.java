@@ -267,6 +267,9 @@ implements TargetActions {
     	try {
     		validateTargetState(ACTION_RECOVER, context);
     		
+    		// TODO: set context.setCurrentArchiveFile to allow preprocessors to access the archive
+    		//       (currently done in AbstractIncrementalFileSystemMedium.checkArchives)
+    		
     		runPreProcessors(Processor.ACTION_CHECK, 0.1, runProcessors, context);
     		
 			double remaining = 

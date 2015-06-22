@@ -367,6 +367,10 @@ implements TargetActions {
 			// Get the trace file
 			File lastArchive = getLastArchive(null, ignoreList, date);
 			File traceFile = ArchiveTraceManager.resolveTraceFileForArchive(this, lastArchive);
+			
+			// TODO: this should be done before running the preprocessors,
+			//       see FileSystemTarget.processArchiveCheck
+			context.setCurrentArchiveFile(lastArchive);
 
 			// Recover at a temporary location - activate the archive check option
 			ArchiveScope perimeter;

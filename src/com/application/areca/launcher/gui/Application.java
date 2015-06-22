@@ -664,21 +664,21 @@ public class Application implements ActionConstants, Window.IExceptionHandler, A
 	public ProcessRunner launchArchiveCheck(final CheckParameters checkParams, final AbstractTarget target, final CheckWindow window) {
 			TargetGroup process = target.getParent();
 			ProcessRunner rn = new ProcessRunner(target) {
-			public void runCommand() throws ApplicationException {
-				ActionProxy.processCheckOnTarget(rTarget, checkParams,
-						rFromDate, context);
-			}
-
-			protected void finishCommand() {
-				window.setResult(context.getReport().getInvalidRecoveredFiles(),
-						context.getReport().getUncheckedRecoveredFiles(),
-						context.getReport().getUnrecoveredFiles(), context.getReport().getNbChecked());
-			}
-
-			protected void finishCommandInError(Exception e) {
-				window.closeInError(e);
-			}
-		};
+				public void runCommand() throws ApplicationException {
+					ActionProxy.processCheckOnTarget(rTarget, checkParams,
+							rFromDate, context);
+				}
+	
+				protected void finishCommand() {
+					window.setResult(context.getReport().getInvalidRecoveredFiles(),
+							context.getReport().getUncheckedRecoveredFiles(),
+							context.getReport().getUnrecoveredFiles(), context.getReport().getNbChecked());
+				}
+	
+				protected void finishCommandInError(Exception e) {
+					window.closeInError(e);
+				}
+			};
 		rn.rProcess = process;
 		rn.refreshAfterProcess = false;
 		rn.rName = RM.getLabel("app.checkfilesaction.process.message");

@@ -1,3 +1,10 @@
+Koios: I'll do some development here, and try to keep this up to date with the official master.
+Current development aims:
+  * A dirty workaround for an issue with postprocessing during Checking
+  * Adding Targets via the Text-based User Interface for automated (script-based) management of Targets
+
+====Original readme====
+
 Project's web site :
 http://www.areca-backup.org/
 

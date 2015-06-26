@@ -3,6 +3,7 @@ package com.application.areca;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -38,7 +39,7 @@ This file is part of Areca.
 public class TargetGroup 
 extends AbstractWorkspaceItem {
     private String name;
-    private HashMap content = new HashMap();
+    private HashMap<String,WorkspaceItem> content = new HashMap<>();
     private boolean hasDeepTargets = false; // Does the group have target linked to it (or to one of its descendants)
     
     public TargetGroup(String name) {
@@ -58,7 +59,7 @@ extends AbstractWorkspaceItem {
 	}
 
 	public void doBeforeDelete() {
-    	Iterator iter = this.getIterator();
+    	Iterator<WorkspaceItem> iter = this.getIterator();
     	while (iter.hasNext()) {
     		WorkspaceItem item = (WorkspaceItem)iter.next();
     		item.doBeforeDelete();
@@ -73,10 +74,10 @@ extends AbstractWorkspaceItem {
     	}
     }
     
-	public Iterator getSortedIterator(boolean filterEmptyGroups) {
-		ArrayList lst = new ArrayList();
+	public Iterator<WorkspaceItem> getSortedIterator(boolean filterEmptyGroups) {
+		ArrayList<WorkspaceItem> lst = new ArrayList<>();
 		
-		Iterator iter = getIterator();
+		Iterator<WorkspaceItem> iter = getIterator();
 		while (iter.hasNext()) {
 			WorkspaceItem item = (WorkspaceItem)iter.next();
 			if (! filterEmptyGroups || item.hasDeepTargets()) {
@@ -84,16 +85,15 @@ extends AbstractWorkspaceItem {
 			}
 		}
 		
-		Object[] data = lst.toArray();
-		Arrays.sort(data, new WorkspaceItemComparator());
+		Collections.sort(lst, new WorkspaceItemComparator());
 
-		return Arrays.asList(data).iterator();
+		return lst.iterator();
 	}
 	
-	private static class WorkspaceItemComparator implements Comparator {
-		public int compare(Object arg0, Object arg1) {
-			String id0 = ((WorkspaceItem)arg0).getName();
-			String id1 = ((WorkspaceItem)arg1).getName();
+	private static class WorkspaceItemComparator implements Comparator<WorkspaceItem> {
+		public int compare(WorkspaceItem arg0, WorkspaceItem arg1) {
+			String id0 = arg0.getName();
+			String id1 = arg1.getName();
 			
 			return id0.compareTo(id1);
 		}
@@ -104,9 +104,9 @@ extends AbstractWorkspaceItem {
 	}
 	
 	public void destroyRepository() throws ApplicationException {
-		Iterator iter = this.getIterator();
+		Iterator<WorkspaceItem> iter = this.getIterator();
 		while (iter.hasNext()) {
-			((WorkspaceItem)iter.next()).destroyRepository();
+			iter.next().destroyRepository();
 		}
 	}
     
@@ -115,11 +115,11 @@ extends AbstractWorkspaceItem {
     }
 
     public SupportedBackupTypes getSupportedBackupSchemes() {
-    	Iterator iter = getIterator();
+    	Iterator<WorkspaceItem> iter = getIterator();
     	SupportedBackupTypes ret = new SupportedBackupTypes();
     	
     	while (iter.hasNext()) {
-        	WorkspaceItem item = (WorkspaceItem)iter.next();
+        	WorkspaceItem item = iter.next();
         	SupportedBackupTypes types = item.getSupportedBackupSchemes();
         	
             if (types.isSupported(AbstractTarget.BACKUP_SCHEME_INCREMENTAL)) {
@@ -150,7 +150,7 @@ extends AbstractWorkspaceItem {
     }
 	
 	private void recomputeHasDeepTargets() {
-		Iterator iter = this.getIterator();
+		Iterator<WorkspaceItem> iter = this.getIterator();
 		while (iter.hasNext()) {
 			WorkspaceItem item = (WorkspaceItem)iter.next();
 			if (item.hasDeepTargets()) {
@@ -162,9 +162,9 @@ extends AbstractWorkspaceItem {
     
     // Backward compatibility
     public AbstractTarget getTarget(int id) {
-    	Iterator iter = this.getIterator();
+    	Iterator<WorkspaceItem> iter = this.getIterator();
     	while (iter.hasNext()) {
-    		Object o = iter.next();
+    		WorkspaceItem o = iter.next();
     		if (o instanceof TargetGroup) {
     			AbstractTarget ret = ((TargetGroup)o).getTarget(id);
     			if (ret != null) {
@@ -184,8 +184,31 @@ extends AbstractWorkspaceItem {
     	return (WorkspaceItem)content.get(uid);
     }
     
+    // search for an AbstractTarget in this and all sub-TargetGroups
+    public AbstractTarget deepSearch(String uid) throws TargetNotAnAbstractTargetException {
+    	WorkspaceItem item = getItem(uid);
+    	if(item != null) {
+    		if(item instanceof AbstractTarget) {
+    			return (AbstractTarget)item;
+    		}else {
+    			throw new TargetNotAnAbstractTargetException(uid);
+    		}
+    	}else {
+	    	Iterator<WorkspaceItem> iter = getIterator();
+	    	while(iter.hasNext()) {
+	    		WorkspaceItem e = iter.next();
+	    		if(e instanceof TargetGroup) {
+	    			AbstractTarget t = ((TargetGroup) e).deepSearch(uid);
+	    			if(t != null) { return t; }
+	    		}
+	    	}
+	    	
+	    	return null;
+    	}
+    }
+    
 	public void remove(String id) {
-		WorkspaceItem itm = (WorkspaceItem)content.get(id);
+		WorkspaceItem itm = content.get(id);
 		if (itm != null) {
 			itm.doBeforeDelete();
 			this.content.remove(id);
@@ -198,7 +221,7 @@ extends AbstractWorkspaceItem {
 	}
     
     public boolean isRunning() {
-    	Iterator iter = this.getIterator();
+    	Iterator<WorkspaceItem> iter = this.getIterator();
     	while (iter.hasNext()) {
     		WorkspaceItem item = (WorkspaceItem)iter.next();
 			if (item.isRunning()) {
@@ -213,7 +236,7 @@ extends AbstractWorkspaceItem {
         return this.content.size();
     }
     
-    public Iterator getIterator() {
+    public Iterator<WorkspaceItem> getIterator() {
         return this.content.values().iterator();
     }
 
@@ -228,10 +251,10 @@ extends AbstractWorkspaceItem {
     
     public String getDescription() {
         StringBuffer buf = new StringBuffer();        
-        Iterator iter = this.getIterator();
+        Iterator<WorkspaceItem> iter = this.getIterator();
         boolean first = true;
         while (iter.hasNext()) {
-            WorkspaceItem item = (WorkspaceItem)iter.next();  
+            WorkspaceItem item = iter.next();  
             if (! first) {
             	buf.append("\n\n");
             }

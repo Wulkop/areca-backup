@@ -34,8 +34,8 @@ This file is part of Areca.
  */
 public class UserCommand {
     private String name;
-    private Map mandatoryArguments = new HashMap();
-    private Map optionalArguments = new HashMap();
+    private Map<String, UserOption> mandatoryArguments = new HashMap<>();
+    private Map<String, UserOption> optionalArguments = new HashMap<>();
 
     public UserCommand(String name) {
         super();
@@ -55,9 +55,9 @@ public class UserCommand {
     }
     
     public UserOption getArgument(String optionName) {
-        UserOption opt = (UserOption)this.mandatoryArguments.get(optionName);
+        UserOption opt = this.mandatoryArguments.get(optionName);
         if (opt == null) {
-            opt = (UserOption)this.optionalArguments.get(optionName);
+            opt = this.optionalArguments.get(optionName);
         }
         
         return opt;
@@ -67,13 +67,11 @@ public class UserCommand {
         return mandatoryArguments.containsKey(optionName);
     }
     
-    public void validateArguments(Map args) throws InvalidCommandException {
-        Iterator iter = this.mandatoryArguments.values().iterator();
+    public void validateArguments(Map<UserOption, Object> args) throws InvalidCommandException {
+        Iterator<UserOption> iter = this.mandatoryArguments.values().iterator();
         while (iter.hasNext()) {
-            UserOption option = (UserOption)iter.next();
-
-            String value = (String)args.get(option.getName());
-            if (value == null) {
+            UserOption option = iter.next();
+            if (!args.containsKey(option)) {
                 throw new InvalidCommandException("the following parameter is mandatory : " + option.getName());
             }
         }

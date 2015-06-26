@@ -4,8 +4,10 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
 import com.application.areca.AbstractTarget;
 import com.application.areca.ActionProxy;
@@ -14,9 +16,12 @@ import com.application.areca.ArecaFileConstants;
 import com.application.areca.CheckParameters;
 import com.application.areca.MergeParameters;
 import com.application.areca.TargetGroup;
+import com.application.areca.TargetNotAnAbstractTargetException;
 import com.application.areca.UserInformationChannel;
+import com.application.areca.Workspace;
 import com.application.areca.WorkspaceItem;
 import com.application.areca.adapters.ConfigurationHandler;
+import com.application.areca.adapters.ConfigurationListener;
 import com.application.areca.context.ProcessContext;
 import com.application.areca.impl.FileSystemTarget;
 import com.application.areca.impl.copypolicy.AbstractCopyPolicy;
@@ -92,7 +97,7 @@ implements CommandConstants {
 	protected void launchImpl(String[] args) {
 		channel = new LoggerUserInformationChannel(false);
 		Logger.defaultLogger().remove(ConsoleLogProcessor.class);
-		UserCommandLine command = null;
+		UserCommandLine commandLine = null;
 		try {
 			try {
 		    	ArecaUserPreferences.initialize(System.getProperty("user.home"));
@@ -100,12 +105,12 @@ implements CommandConstants {
 				LocalPreferences.instance().save();
 			} catch (Exception ignored) {
 			}
-			command = new UserCommandLine(args);
-			command.parse();
+			commandLine = new UserCommandLine(args);
+			commandLine.parse();
 
 			// Log in the config file's parent directory
-			if (command.hasOption(OPTION_CONFIG)) {
-				File configFile = new File(command.getOption(OPTION_CONFIG));
+			if (commandLine.hasOption(OPTION_CONFIG)) {
+				File configFile = new File(commandLine.getOption(OPTION_CONFIG));
 				File parentFile = FileSystemManager.getParentFile(configFile);
 				FileTool.getInstance().createDir(parentFile);
 				Logger.defaultLogger().remove(FileLogProcessor.class);
@@ -127,45 +132,101 @@ implements CommandConstants {
 				Logger.defaultLogger().addProcessor(proc);
 			}
 			
-			WorkspaceItem item = null;
-			
-			if (! command.getCommand().equalsIgnoreCase(COMMAND_INFOS.getName())) {
-				item = getItem(command);
-
-				Logger.defaultLogger().info("Configuration path : " + command.getOption(OPTION_CONFIG));
-				channel.print("Configuration path : " + command.getOption(OPTION_CONFIG) );
-
-				if (item instanceof AbstractTarget) {
-					Logger.defaultLogger().info("Target : " + item.getName());
-					channel.print("Target : " + item.getName());
-				}
-			}
-
-			if (command.getCommand().equalsIgnoreCase(COMMAND_MERGE.getName())) {
-				processMerge(command, item);
-			} else if (command.getCommand().equalsIgnoreCase(COMMAND_RECOVER.getName())) {
-				processRecover(command, item);
-			} else if (command.getCommand().equalsIgnoreCase(COMMAND_BACKUP.getName())) {
-				processBackup(command, item);
-			} else if (command.getCommand().equalsIgnoreCase(COMMAND_DESCRIBE.getName())) {
-				processDescribe(command, item);
-			} else if (command.getCommand().equalsIgnoreCase(COMMAND_INFOS.getName())) {
-				processInfos(command);
-			} else if (command.getCommand().equalsIgnoreCase(COMMAND_DELETE.getName())) {
-				processDelete(command, item);
-			} else if (command.getCommand().equalsIgnoreCase(COMMAND_CHECK.getName())) {
-				processCheck(command, item);
+			final UserCommand command = commandLine.getCommand();
+			if (command == COMMAND_MERGE) {
+				processMerge(commandLine);
+			} else if (command == COMMAND_RECOVER) {
+				processRecover(commandLine);
+			} else if (command == COMMAND_BACKUP) {
+				processBackup(commandLine);
+			} else if (command == COMMAND_DESCRIBE) {
+				processDescribe(commandLine);
+			} else if (command == COMMAND_INFOS) {
+				processInfos(commandLine);
+			} else if (command == COMMAND_DELETE) {
+				processDelete(commandLine);
+			} else if (command == COMMAND_CHECK) {
+				processCheck(commandLine);
+			} else if(command == COMMAND_NEWTARGET) {
+				processNewTarget(commandLine);
 			}
 
 			Logger.defaultLogger().info("End of process.");
 		} catch (InvalidCommandException e) {
 			setErrorCode(ERR_SYNTAX); // Syntax error
 			printHelp();
-			channel.print(command.toString());
+			channel.print(commandLine.toString());
 			channel.print("Error : invalid arguments (" + e.getMessage() + ")");
 		} catch (Throwable e) {
 			handleError(e);
 		}
+	}
+	
+	private void processNewTarget(UserCommandLine command) throws Exception {
+		AbstractTarget template = getTemplate(command);
+		AbstractTarget newTarget = (AbstractTarget)template.duplicate();
+		adjustNewTarget(newTarget, command);
+		
+		// TODO: code duplication with Application.duplicateTarget
+		template.getParent().linkChild(newTarget);
+		newTarget.getMedium().install();
+		
+		File workspacePathFile = getWorkspacePathFile(command);
+		ConfigurationListener.getInstance().targetCreated(newTarget, workspacePathFile);
+	}
+	
+	private AbstractTarget getTemplate(UserCommandLine command) throws Exception {
+		String workspaceFilepath = command.getOption(OPTION_WORKSPACE);
+		final boolean installMedium = false; // TODO: huh? What does this flag do?
+		// TODO: either the coupling with Application is unnecessary, or this line is wrong:
+		Workspace w = Workspace.open(workspaceFilepath, null, installMedium);
+		
+		String templateUid = command.getOption(OPTION_TEMPLATE);
+		
+		try {
+			AbstractTarget item = w.getContent().deepSearch(templateUid);
+			if(null == item) {
+				throw new InvalidCommandException("Template "+templateUid+" not found.");
+			}
+			return item;
+		}catch(TargetNotAnAbstractTargetException e) {
+			throw new InvalidCommandException("Template "+templateUid+" must be a single target.");
+		}
+	}
+	
+	private File getWorkspacePathFile(UserCommandLine command)
+			throws Exception {
+		return new File(command.getOption(OPTION_WORKSPACE));
+	}
+	
+	private void adjustNewTarget(AbstractTarget target, UserCommandLine command)
+		throws Exception {
+		final String newName = command.getOption(OPTION_NAME);
+		if(newName != null) {
+			target.setTargetName(newName);
+		}
+		
+		final Set<File> sources = getSources(command);
+		if(target instanceof FileSystemTarget) {
+			FileSystemTarget fst = (FileSystemTarget)target;
+			fst.setSources(sources);
+		}else {
+			throw new InvalidCommandException("Sorry, only file system targets are supported at the moment.");
+		}
+	}
+	
+	private Set<File> getSources(UserCommandLine command) throws InvalidCommandException {
+		if(!command.hasOption(OPTION_DOUBLEDASH)) {
+			throw new InvalidCommandException("Please specify sources after a double dash --");
+		}
+		Iterator<String> sources = command.getOption(OPTION_DOUBLEDASH);
+		// argh!
+		HashSet<File> sourceFiles = new HashSet<File>();
+		while(sources.hasNext()) {
+			final String currentFileName = sources.next();
+			sourceFiles.add(new File(currentFileName));
+		}
+		return sourceFiles;
 	}
 
 	private ProcessContext buildContext(WorkspaceItem item) {
@@ -174,12 +235,35 @@ implements CommandConstants {
 
 		return context;
 	}
+	
+	private WorkspaceItem getItemFromConfigAndTargetOptions(UserCommandLine command)
+			throws InvalidCommandException, AdapterException {
+		final String configFilepath = command.getOption(OPTION_CONFIG);
+		final String targetId = command.getOption(OPTION_TARGET); // can be null
+		return getItemAndDoLog(command, configFilepath, targetId);
+	}
+	
+	private WorkspaceItem getItemAndDoLog(UserCommandLine command, final String ConfigFilepath, final String TargetId)
+			throws InvalidCommandException, AdapterException {
+		WorkspaceItem item = getItem(command, ConfigFilepath, TargetId);
+		
+		Logger.defaultLogger().info("Configuration path : " + command.getOption(OPTION_CONFIG));
+		channel.print("Configuration path : " + command.getOption(OPTION_CONFIG) );
 
+		if (item instanceof AbstractTarget) {
+			Logger.defaultLogger().info("Target : " + item.getName());
+			channel.print("Target : " + item.getName());
+		}
+		
+		return item;
+	}
+	
 	/**
 	 * This method should be very simple, but ensuring backward compatibility makes it complicated :/
 	 */
-	private WorkspaceItem getItem(UserCommandLine command) throws InvalidCommandException, AdapterException {
-		File config = new File(command.getOption(OPTION_CONFIG));
+	private WorkspaceItem getItem(UserCommandLine command, final String ConfigFilepath, final String TargetId)
+			throws InvalidCommandException, AdapterException {
+		File config = new File(ConfigFilepath);
 		String targetUID = null; // Backward compatibility
 
 		if (! FileSystemManager.exists(config)) {
@@ -222,25 +306,33 @@ implements CommandConstants {
 		}
 
 		WorkspaceItem item = ConfigurationHandler.getInstance().readObject(config, new MissingDataListener(), null, true, true);
-		if ((item instanceof TargetGroup) && command.hasOption(OPTION_TARGET)) {
-			String id = command.getOption(OPTION_TARGET);
-			AbstractTarget target = ((TargetGroup)item).getTarget(Integer.parseInt(id));
-			if (target == null) {
-				throw new InvalidCommandException("Invalid target ID : " + id);
-			} else {
-				return target;
-			}
-		} else if ((item instanceof TargetGroup) && targetUID != null) {
-			AbstractTarget target = (AbstractTarget)((TargetGroup)item).getItem(targetUID);
-			if (target == null) {
-				throw new InvalidCommandException("Invalid target UID : " + targetUID);
-			} else {
-				return target;
-			}
-		} else if (item != null){
-			return item;
-		} else {
+		if(item == null)
+		{
 			throw new InvalidCommandException("Target or target group not found : " + FileSystemManager.getDisplayPath(config));
+		}
+		
+		if(item instanceof TargetGroup) {
+			TargetGroup tg = (TargetGroup)item;
+			if(TargetId != null) {
+				AbstractTarget target = tg.getTarget(Integer.parseInt(TargetId));
+				if (target == null) {
+					throw new InvalidCommandException("Invalid target ID : " + TargetId);
+				} else {
+					return target;
+				}
+			}else if(targetUID != null) {
+				AbstractTarget target = (AbstractTarget) tg.getItem(targetUID);
+				if (target == null) {
+					throw new InvalidCommandException("Invalid target UID : " + targetUID);
+				} else {
+					return target;
+				}
+			}else {
+				throw new InvalidCommandException("Target group not found : " + FileSystemManager.getDisplayPath(config));
+			}
+		}else
+		{
+			return item;
 		}
 	}
 
@@ -298,6 +390,10 @@ implements CommandConstants {
 		channel.print("         -wdir to use a specific working directory");
 		channel.print("         -a to check all files (not only those contained in the archive denoted by the date argument)");     
 		channel.print("         -date to specify the archive which will be checked");
+		
+		channel.print("");
+		channel.print("Add a new target from a template :");
+		channel.print("      newtarget -workspace (workspace path) -template (target uid) [-name (name of new target)] -- (sources)");
 
 		channel.print("");
 		channel.print(SEPARATOR);
@@ -323,8 +419,10 @@ implements CommandConstants {
 	/**
 	 * Backup
 	 */
-	private void processBackup(UserCommandLine command, final WorkspaceItem item) 
+	private void processBackup(UserCommandLine command) 
 	throws Exception {
+		final WorkspaceItem item = getItemFromConfigAndTargetOptions(command);
+		
 		List threadContainer = new ArrayList();
 
 		// Launch backup
@@ -341,25 +439,19 @@ implements CommandConstants {
 	private void processBackup(UserCommandLine command, final WorkspaceItem item, List threadContainer) 
 	throws Exception {
 		final String backupScheme;
-		String fOption = command.getOption(OPTION_FULL_BACKUP);
-		String dOption = command.getOption(OPTION_DIFFERENTIAL_BACKUP);        
-		if (fOption != null && fOption.trim().length() != 0) {
+		final boolean fullBackup = command.getOption(OPTION_FULL_BACKUP);
+		final boolean differentialBackup = command.getOption(OPTION_DIFFERENTIAL_BACKUP);        
+		if (fullBackup) {
 			backupScheme = AbstractTarget.BACKUP_SCHEME_FULL;
-		} else if (dOption != null && dOption.trim().length() != 0) {
+		} else if (differentialBackup) {
 			backupScheme = AbstractTarget.BACKUP_SCHEME_DIFFERENTIAL;
 		} else {
 			backupScheme = AbstractTarget.BACKUP_SCHEME_INCREMENTAL;
 		}
 
-		final boolean forceSync = (
-				command.getOption(OPTION_SYNC) != null
-				&& command.getOption(OPTION_SYNC).trim().length() != 0
-		);
+		final boolean forceSync = command.getOption(OPTION_SYNC);
 
-		boolean resume = (
-				command.getOption(OPTION_RESUME) != null
-				&& command.getOption(OPTION_RESUME).trim().length() != 0
-		);
+		boolean resume = command.getOption(OPTION_RESUME);
 
 		boolean conditionalResume = (
 				command.getOption(OPTION_RESUME_CONDITIONAL) != null
@@ -381,7 +473,7 @@ implements CommandConstants {
 		String destination = normalizePath(command.getOption(OPTION_SPEC_LOCATION));
 
 		final CheckParameters checkParams = new CheckParameters(
-				command.getOption(OPTION_CHECK_FILES) != null && command.getOption(OPTION_CHECK_FILES).trim().length() != 0,
+				command.getOption(OPTION_CHECK_FILES),
 				true,
 				true,
 				destination != null,
@@ -445,8 +537,9 @@ implements CommandConstants {
 	/**
 	 * Merges the archives.
 	 */
-	private void processMerge(UserCommandLine command, WorkspaceItem item) 
+	private void processMerge(UserCommandLine command) 
 	throws Exception {
+		WorkspaceItem item = getItemFromConfigAndTargetOptions(command);
 		ProcessContext context = buildContext(item);
 
 		String strDelay = command.getOption(OPTION_DELAY);
@@ -471,17 +564,14 @@ implements CommandConstants {
 		String destination = normalizePath(command.getOption(OPTION_SPEC_LOCATION));
 
 		final CheckParameters checkParams = new CheckParameters(
-				command.getOption(OPTION_CHECK_FILES) != null && command.getOption(OPTION_CHECK_FILES).trim().length() != 0,
+				command.getOption(OPTION_CHECK_FILES),
 				true,
 				true,
 				destination != null,
 				destination
 		);
 		
-		boolean keepDeletedEntries = (
-				command.getOption(OPTION_KEEP_DELETED_ENTRIES) != null
-				&& command.getOption(OPTION_KEEP_DELETED_ENTRIES).trim().length() != 0
-		);
+		boolean keepDeletedEntries = command.getOption(OPTION_KEEP_DELETED_ENTRIES);
 
 		MergeParameters params = new MergeParameters(keepDeletedEntries, destination != null, destination);
 		
@@ -542,8 +632,10 @@ implements CommandConstants {
 	/**
 	 * Delete the archives.
 	 */
-	private void processDelete(UserCommandLine command, WorkspaceItem item) 
+	private void processDelete(UserCommandLine command) 
 	throws Exception {
+		WorkspaceItem item = getItemFromConfigAndTargetOptions(command);
+		
 		AbstractTarget target = null;
 		if (item instanceof AbstractTarget) {
 			target = (AbstractTarget)item;
@@ -577,8 +669,10 @@ implements CommandConstants {
 	/**
 	 * Recovery
 	 */
-	private void processRecover(UserCommandLine command, WorkspaceItem item) 
+	private void processRecover(UserCommandLine command) 
 	throws Exception {
+		WorkspaceItem item = getItemFromConfigAndTargetOptions(command);
+		
 		AbstractTarget target = null;
 		if (item instanceof AbstractTarget) {
 			target = (AbstractTarget)item;
@@ -588,22 +682,13 @@ implements CommandConstants {
 
 		String destination = normalizePath(command.getOption(OPTION_DESTINATION));
 
-		boolean checkRecoveredFiles = (
-				command.getOption(OPTION_CHECK_FILES) != null
-				&& command.getOption(OPTION_CHECK_FILES).trim().length() != 0
-		);
+		boolean checkRecoveredFiles = command.getOption(OPTION_CHECK_FILES);
 
 		ProcessContext context = buildContext(item);
 
-		boolean noSubDir = (
-				command.getOption(OPTION_NO_SUBDIR) != null
-				&& command.getOption(OPTION_NO_SUBDIR).trim().length() != 0
-		);
+		boolean noSubDir = command.getOption(OPTION_NO_SUBDIR);
 
-		boolean overwrite = (
-				command.getOption(OPTION_OVERWRITE) != null
-				&& command.getOption(OPTION_OVERWRITE).trim().length() != 0
-		);
+		boolean overwrite = command.getOption(OPTION_OVERWRITE);
 
 		AbstractCopyPolicy policy;
 		if (overwrite) {
@@ -629,8 +714,10 @@ implements CommandConstants {
 		);
 	}
 
-	private void processCheck(UserCommandLine command, WorkspaceItem item) 
+	private void processCheck(UserCommandLine command) 
 	throws Exception {
+		WorkspaceItem item = getItemFromConfigAndTargetOptions(command);
+		
 		AbstractTarget target = null;
 		if (item instanceof AbstractTarget) {
 			target = (AbstractTarget)item;
@@ -643,10 +730,7 @@ implements CommandConstants {
 			destination = normalizePath(command.getOption(OPTION_SPEC_LOCATION));
 		}
 
-		boolean checkAll = (
-				command.getOption(OPTION_CHECK_ALL) != null
-				&& command.getOption(OPTION_CHECK_ALL).trim().length() != 0
-		);
+		boolean checkAll = command.getOption(OPTION_CHECK_ALL);
 
 		ProcessContext context = buildContext(item);
 
@@ -683,8 +767,9 @@ implements CommandConstants {
 	/**
 	 * Description
 	 */
-	private void processDescribe(UserCommandLine command, WorkspaceItem item) 
+	private void processDescribe(UserCommandLine command) 
 	throws Exception {
+		WorkspaceItem item = getItemFromConfigAndTargetOptions(command);
 		channel.print("\n" + item.getDescription());
 	}
 	

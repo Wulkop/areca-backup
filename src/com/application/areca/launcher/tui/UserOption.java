@@ -1,5 +1,7 @@
 package com.application.areca.launcher.tui;
 
+import java.util.Iterator;
+
 /**
  * <BR>
  * @author Olivier PETRUCCI
@@ -27,24 +29,29 @@ This file is part of Areca.
     Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
  */
-public class UserOption {
-    private int tokens;
+public abstract class UserOption<Value> {
     private String name;
 
-    public UserOption(String name, int tokens) {
-        super();
-        this.tokens = tokens;
+    public UserOption(String name) {
         this.name = name;
-        
-        if (tokens < 1 || tokens > 2) {
-            throw new IllegalArgumentException();
-        }
     }
 
     public String getName() {
         return name;
     }
-    public int getTokens() {
-        return tokens;
+
+    public class ParseResult {
+    	private String currentArgument;
+        private Value value;
+        
+        public ParseResult(String currentArgument, Value value) {
+        	this.currentArgument = currentArgument;
+        	this.value = value;
+        }
+        
+        public String getCurrentArgument() { return currentArgument; }
+        public Value getValue() { return value; }
     }
+    
+    public abstract ParseResult parse(Iterator<String> iArgs) throws InvalidCommandException;
 }

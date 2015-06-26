@@ -1,7 +1,9 @@
 package com.application.areca.launcher.tui;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -37,7 +39,7 @@ This file is part of Areca.
  */
 public class UserCommandLine implements CommandConstants {
 
-    private static Map ACCEPTED_COMMANDS;
+    private static Map<String, UserCommand> ACCEPTED_COMMANDS;
     
     static {
         Launcher.COMMAND_BACKUP.addMandatoryArgument(Launcher.OPTION_CONFIG);
@@ -84,7 +86,12 @@ public class UserCommandLine implements CommandConstants {
         Launcher.COMMAND_DELETE.addOptionalArgument(Launcher.OPTION_DATE);
         Launcher.COMMAND_DELETE.addOptionalArgument(Launcher.OPTION_DELAY);
         
-        ACCEPTED_COMMANDS = new HashMap();
+        Launcher.COMMAND_NEWTARGET.addMandatoryArgument(Launcher.OPTION_WORKSPACE);
+        Launcher.COMMAND_NEWTARGET.addMandatoryArgument(OPTION_TEMPLATE);
+        Launcher.COMMAND_NEWTARGET.addOptionalArgument(Launcher.OPTION_NAME);
+        Launcher.COMMAND_NEWTARGET.addMandatoryArgument(Launcher.OPTION_DOUBLEDASH);
+        
+        ACCEPTED_COMMANDS = new HashMap<String, UserCommand>();
         ACCEPTED_COMMANDS.put(Launcher.COMMAND_INFOS.getName(), Launcher.COMMAND_INFOS);
         ACCEPTED_COMMANDS.put(Launcher.COMMAND_BACKUP.getName(), Launcher.COMMAND_BACKUP);
         ACCEPTED_COMMANDS.put(Launcher.COMMAND_MERGE.getName(), Launcher.COMMAND_MERGE);
@@ -92,14 +99,16 @@ public class UserCommandLine implements CommandConstants {
         ACCEPTED_COMMANDS.put(Launcher.COMMAND_DESCRIBE.getName(), Launcher.COMMAND_DESCRIBE);
         ACCEPTED_COMMANDS.put(Launcher.COMMAND_DELETE.getName(), Launcher.COMMAND_DELETE);
         ACCEPTED_COMMANDS.put(Launcher.COMMAND_CHECK.getName(), Launcher.COMMAND_CHECK);
+        ACCEPTED_COMMANDS.put(Launcher.COMMAND_NEWTARGET.getName(), Launcher.COMMAND_NEWTARGET);
     }
     
     private String[] args;
-    private String command;
-    private HashMap options;
+    private UserCommand command;
+    private HashMap<UserOption, Object> options;
     
     public UserCommandLine(String[] args) {
         this.args = rebuildArguments(args);
+        this.options = new HashMap<>();
     }
     
     public void parse() throws InvalidCommandException {
@@ -107,36 +116,40 @@ public class UserCommandLine implements CommandConstants {
             throw new InvalidCommandException("a command must be provided");
         }
         
-        options = new HashMap();
-        command = args[0];
-        if (! validateCommand(command)) {
-            throw new InvalidCommandException("invalid command : " + command);
+        List<String> argsList = Arrays.asList(args);
+        Iterator<String> iArg = argsList.iterator();
+        
+        final String commandName = iArg.next();
+        if (! validateCommand(commandName)) {
+            throw new InvalidCommandException("invalid command : " + commandName);
         }
+        command = ACCEPTED_COMMANDS.get(commandName);
         
-        UserCommand userCommand = (UserCommand)ACCEPTED_COMMANDS.get(command);
-        
-        String option, value;
-        int i=1;
-        while (i < args.length) {
-            option = args[i++];
-            if (option != null && option.length() != 0) {
-                UserOption userOption = userCommand.getArgument(option);
+        if(iArg.hasNext()) {
+        	String option = iArg.next();
+            while (true) {
+                if (option.length() == 0) { continue; }
+                
+                UserOption userOption = command.getArgument(option);
                 if (userOption == null) {
                     throw new InvalidCommandException("invalid option : " + option);
                 }
                 
-                if (userOption.getTokens() == 2) {
-                    value = args[i++];
-                } else {
-                    value = "true";
+                UserOption.ParseResult res = userOption.parse(iArg);
+                options.put(userOption, res.getValue());
+                
+                if(res.getCurrentArgument() != null) {
+                	option = res.getCurrentArgument();
+                }else if(iArg.hasNext()) {
+                	option = iArg.next();
+                }else {
+                	break;
                 }
-
-                options.put(option, value);
             }
         }
         
-        userCommand.validateArguments(options);
-        this.validateStructure();
+        command.validateArguments(options);
+        this.validateStructure(command);
     }
     
     /**
@@ -149,28 +162,29 @@ public class UserCommandLine implements CommandConstants {
     /**
      * Validates the mandatory options.
      */
-    protected void validateStructure() throws InvalidCommandException {
-        if (
-                    this.command.equalsIgnoreCase(Launcher.COMMAND_DELETE.getName())
-                    && (! this.options.containsKey(Launcher.OPTION_DELAY.getName()))
-                    && (! this.options.containsKey(Launcher.OPTION_TO.getName()))
-                    && (! this.options.containsKey(Launcher.OPTION_DATE.getName()))
+    protected void validateStructure(UserCommand command) throws InvalidCommandException {
+        if (command == Launcher.COMMAND_DELETE) {
+        	if(! (   this.options.containsKey(Launcher.OPTION_DELAY)
+                  || this.options.containsKey(Launcher.OPTION_TO)
+                  || this.options.containsKey(Launcher.OPTION_DATE)
+                 )
             ) {
                 throw new InvalidCommandException("the " +
                         Launcher.OPTION_TO.getName() + " or " + Launcher.OPTION_DATE.getName() + " option is mandatory");
+        	}
         }
     }
     
-    public String getCommand() {
+    public UserCommand getCommand() {
         return this.command;
     }
     
-    public String getOption(UserOption option) {
-        return (String)(this.options.get(option.getName()));
+    public <T> T getOption(UserOption<T> option) {
+        return (T)this.options.get(option);
     }
     
     public boolean hasOption(UserOption option) {
-        return this.options.containsKey(option.getName());
+        return this.options.containsKey(option);
     }
     
     public String toString() {
@@ -188,7 +202,7 @@ public class UserCommandLine implements CommandConstants {
     }
     
     private static String[] rebuildArguments(String[] args) {
-        List ret = new ArrayList();
+        List<String> ret = new ArrayList<String>();
         boolean isStarted = false;
         String currentPart = "";
         for (int i=0; i<args.length; i++) {
@@ -216,11 +230,11 @@ public class UserCommandLine implements CommandConstants {
             }
         }
         
-        return (String[])ret.toArray(new String[0]);
+        return (String[])ret.toArray(new String[ret.size()]);
     }
     
     
-    private static void add(List l, String v) {
+    private static void add(List<String> l, String v) {
         if (v.trim().length() != 0) {
             l.add(v);
         }

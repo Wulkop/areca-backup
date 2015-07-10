@@ -1,0 +1,4 @@
+just run ant in the areca directory
+you might have to adjust the swtfile variable in build.xml
+install libattr1-dev
+install libacl1-dev

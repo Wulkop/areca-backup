@@ -1527,6 +1527,9 @@ implements TargetActions {
 
 				// Register the entry
 				context.getTraceAdapter().writeEntry(fEntry, inspectFileContent ? shaBase64 : null);
+			} catch(FileNotFoundException e)
+			{
+				Logger.defaultLogger().warn(e.getMessage());
 			} catch (IOException e) {
 				Logger.defaultLogger().error(e);
 				throw new StoreException("Error during storage of " + entry.getKey() + " : " + e.getMessage(), e);

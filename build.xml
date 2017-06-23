@@ -9,7 +9,7 @@
     <description>Areca's compilation script</description>
 
     <!-- Path to SWT libraries (download the SWT package if this file is missing on your system) -->
-    <property name="swtfile" value="/usr/lib/java/swt.jar"/>
+    <property name="swtfile" value="./lib/swt.jar"/>
 
     <property name="root" value="."/>
 
@@ -30,7 +30,8 @@
         <javac srcdir="${root}/src"
                destdir="${root}/classes"
                debug="off"
-               source="1.4"
+               source="1.7"
+	       encoding="iso-8859-1"
         >
             <classpath>
                 <fileset dir="${root}/lib">
@@ -65,17 +66,18 @@
         <exec dir="${root}/jni" executable="gcc">
             <arg value="-c"/>
             <arg value="-fPIC"/>
-            <arg value="-lacl"/>
+	    <arg value="-fno-stack-protector"/>
             <arg value="com_myJava_file_metadata_posix_jni_wrapper_FileAccessWrapper.c"/>
             <arg value="-o"/>
             <arg value="com_myJava_file_metadata_posix_jni_wrapper_FileAccessWrapper.o"/>
+            <arg value="-lacl"/>
         </exec>
         <exec dir="${root}/jni" executable="gcc">
             <arg value="-shared"/>
-            <arg value="-lacl"/>
             <arg value="-o"/>
             <arg value="libarecafs.so"/>
             <arg value="com_myJava_file_metadata_posix_jni_wrapper_FileAccessWrapper.o"/>
+	    <arg value="-lacl"/>
         </exec>
         <delete file="${root}/jni/com_myJava_file_metadata_posix_jni_wrapper_FileAccessWrapper.o"/>
         <delete file="${root}/jni/com_myJava_file_metadata_posix_jni_wrapper_FileAccessWrapper.h"/>

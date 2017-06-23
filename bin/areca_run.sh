@@ -5,7 +5,7 @@
 #
 ####################################################################
 #Options
-JAVADIR=/usr/java
+JAVADIR=/usr/bin/java
 
 #Getting Areca's directory
 PROGRAM_DIR=`dirname "$0"`
@@ -64,7 +64,7 @@ look_for_java() {
 
 #Method to check the current JRE (>=1.4)
 check_version() {
-  JAVA_HEADER=`${JAVA_PROGRAM_DIR}java -version 2>&1 | head -n 1`
+  JAVA_HEADER=`${JAVADIR}java -version 2>&1 | head -n 1`
   JAVA_IMPL=`echo ${JAVA_HEADER} | cut -f1 -d' '`
   if [ "$JAVA_IMPL" = "java" ] ; then
     VERSION=`echo ${JAVA_HEADER} | sed "s/java version \"\(.*\)\"/\1/"`
@@ -79,7 +79,7 @@ check_version() {
 }
 
 #Locate and test the java executable
-if [ "$JAVA_PROGRAM_DIR" == "" ]; then
+if [ "$JAVADIR" == "" ]; then
   if ! command -v java &>/dev/null; then
     if ! look_for_java ; then
       exit 1
@@ -94,5 +94,5 @@ if [ "$JAVA_PROGRAM_DIR" == "" ]; then
 fi
 
 #Launching Areca
-"${JAVA_PROGRAM_DIR}java" -version
-"${JAVA_PROGRAM_DIR}java" -Xmx1024m -Xms64m -cp "${CLASSPATH}" -Duser.dir="${PROGRAM_DIR}" -Djava.library.path="${LIBRARY_PATH}" -Djava.system.class.loader=com.application.areca.impl.tools.ArecaClassLoader $1 "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9" "${10}" "${11}" "${12}"
+"${JAVADIR}" -version
+"${JAVADIR}" -Xmx1024m -Xms64m -cp "${CLASSPATH}" -Duser.dir="${PROGRAM_DIR}" -Djava.library.path="${LIBRARY_PATH}" -Djava.system.class.loader=com.application.areca.impl.tools.ArecaClassLoader $1 "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9" "${10}" "${11}" "${12}"

@@ -9,7 +9,7 @@
     <description>Areca's compilation script</description>
 
     <!-- Path to SWT libraries (download the SWT package if this file is missing on your system) -->
-    <property name="swtfile" value="./lib/swt.jar"/>
+    <property name="swtfile" value="/usr/share/java/swt.jar"/>
 
     <property name="root" value="."/>
 
@@ -19,7 +19,6 @@
             <os family="windows"/>
         </and>
     </condition>
-
 
     <target name="compilejava">
         <description>Java compilation task (builds areca.jar)</description>
@@ -71,6 +70,8 @@
             <arg value="-o"/>
             <arg value="com_myJava_file_metadata_posix_jni_wrapper_FileAccessWrapper.o"/>
             <arg value="-lacl"/>
+	    <arg value="-I=${java.home}/../include"/>
+            <arg value="-I=${java.home}/../include/linux"/>
         </exec>
         <exec dir="${root}/jni" executable="gcc">
             <arg value="-shared"/>
@@ -78,6 +79,8 @@
             <arg value="libarecafs.so"/>
             <arg value="com_myJava_file_metadata_posix_jni_wrapper_FileAccessWrapper.o"/>
 	    <arg value="-lacl"/>
+            <arg value="-I=${java.home}/../include"/>
+            <arg value="-I=${java.home}/../include/linux"/>
         </exec>
         <delete file="${root}/jni/com_myJava_file_metadata_posix_jni_wrapper_FileAccessWrapper.o"/>
         <delete file="${root}/jni/com_myJava_file_metadata_posix_jni_wrapper_FileAccessWrapper.h"/>

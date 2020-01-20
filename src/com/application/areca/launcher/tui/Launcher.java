@@ -138,7 +138,7 @@ implements CommandConstants {
 			} else if (command == COMMAND_RECOVER) {
 				processRecover(commandLine);
 			} else if (command == COMMAND_BACKUP) {
-				processBackup(commandLine);
+					processBackup(commandLine);
 			} else if (command == COMMAND_DESCRIBE) {
 				processDescribe(commandLine);
 			} else if (command == COMMAND_INFOS) {
@@ -439,8 +439,8 @@ implements CommandConstants {
 	private void processBackup(UserCommandLine command, final WorkspaceItem item, List threadContainer) 
 	throws Exception {
 		final String backupScheme;
-		final boolean fullBackup = command.getOption(OPTION_FULL_BACKUP);
-		final boolean differentialBackup = command.getOption(OPTION_DIFFERENTIAL_BACKUP);        
+		final boolean fullBackup = command.hasOption(OPTION_FULL_BACKUP);
+		final boolean differentialBackup = command.hasOption(OPTION_DIFFERENTIAL_BACKUP);
 		if (fullBackup) {
 			backupScheme = AbstractTarget.BACKUP_SCHEME_FULL;
 		} else if (differentialBackup) {
@@ -449,9 +449,9 @@ implements CommandConstants {
 			backupScheme = AbstractTarget.BACKUP_SCHEME_INCREMENTAL;
 		}
 
-		final boolean forceSync = command.getOption(OPTION_SYNC);
+		final boolean forceSync = command.hasOption(OPTION_SYNC);
 
-		boolean resume = command.getOption(OPTION_RESUME);
+		boolean resume = command.hasOption(OPTION_RESUME);
 
 		boolean conditionalResume = (
 				command.getOption(OPTION_RESUME_CONDITIONAL) != null
@@ -473,7 +473,7 @@ implements CommandConstants {
 		String destination = normalizePath(command.getOption(OPTION_SPEC_LOCATION));
 
 		final CheckParameters checkParams = new CheckParameters(
-				command.getOption(OPTION_CHECK_FILES),
+				command.hasOption(OPTION_CHECK_FILES),
 				true,
 				true,
 				destination != null,
